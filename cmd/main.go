@@ -67,11 +67,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			log.Println("Client Disconnected", err)
 			delete(clients, conn)
-			conn.Close()
+			err := conn.Close()
+			if err != nil {
+				return
+			}
 			break
 		}
 		text := string(message)
-		broadcast <- model.Message{text, nick}
+		broadcast <- model.Message{Text: text, SenderName: nick}
 	}
 }
 
@@ -93,8 +96,11 @@ func handleMessages() {
 		for client := range clients {
 			err := client.WriteMessage(websocket.TextMessage, b)
 			if err != nil {
-				log.Println("Error PUSH msg: %v", err)
-				client.Close()
+				log.Printf("Error PUSH msg: %v\n", err)
+				err := client.Close()
+				if err != nil {
+					return
+				}
 				delete(clients, client)
 			}
 		}
