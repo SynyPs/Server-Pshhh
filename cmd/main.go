@@ -5,12 +5,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"serverpshh/dbase"
 	"serverpshh/model"
 	"strings"
 	"sync"
 	"time"
-
-	"serverpshh/dbase"
 
 	"github.com/gorilla/websocket"
 )
@@ -81,9 +80,44 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 			conn.Close()
 			break
 		}
+
 		msg.Nick = nick
 		msg.Timestamp = time.Now()
-		broadcast <- msg
+
+		switch msg.Type {
+
+		case model.TypeMsg:
+			broadcast <- msg
+
+		case model.TypeAddContact:
+			dbase.AddContact(nick, msg.To)
+
+		case model.TypeGetContact:
+			contacts := dbase.GetContacts(nick)
+
+			jsonContacts, _ := json.Marshal(contacts)
+			reponse := model.ChatMessage{
+				Type: model.TypeContactList,
+				Msg:  string(jsonContacts),
+			}
+			conn.WriteJSON(reponse)
+		}
+
+		//var msg model.ChatMessage
+		//err := conn.ReadJSON(&msg)
+		//if err != nil {
+		//	log.Println("Client Disconnected", err)
+		//
+		//	mu.Lock()
+		//	delete(clients, conn)
+		//	mu.Unlock()
+		//
+		//	conn.Close()
+		//	break
+		//}
+		//msg.Nick = nick
+		//msg.Timestamp = time.Now()
+		//broadcast <- msg
 	}
 }
 

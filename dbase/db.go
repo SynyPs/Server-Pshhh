@@ -23,16 +23,13 @@ func InitDB() {
 		panic(err)
 	}
 
-	query := `
-	CREATE TABLE IF NOT EXISTS messages (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		nick Text,
-		receiver Text,
-		msg Text,
-		time Text
-	);`
+	//Chat
+	_, err = db.Exec(queryDB())
+	if err != nil {
+		panic(err)
+	}
 
-	_, err = db.Exec(query)
+	_, err = db.Exec(queryContact())
 	if err != nil {
 		panic(err)
 	}
@@ -69,4 +66,34 @@ func GetMsgObj() []model.ChatMessage {
 		})
 	}
 	return history
+}
+
+func AddContact(owner string, friend string) {
+	query := "INSERT INTO contacts (owner, contact) VALUES (?, ?)"
+
+	_, err := db.Exec(query, owner, friend)
+	if err != nil {
+		fmt.Println("Error add conts", err)
+	}
+}
+
+func GetContacts(owner string) []string {
+	rows, err := db.Query("SELECT contact FROM contacts WHERE owner=?", owner)
+	if err != nil {
+		panic(err)
+		return nil
+	}
+	defer rows.Close()
+
+	var contacts []string
+	for rows.Next() {
+		var friend string
+		err := rows.Scan(&friend)
+		if err != nil {
+			continue
+		}
+
+		contacts = append(contacts, friend)
+	}
+	return contacts
 }
