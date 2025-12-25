@@ -12,7 +12,7 @@ import (
 var (
 	db *sql.DB
 
-	queryExecMsg string = "INSERT INTO messages (nick, msg, time) VALUES (?, ?, ?)"
+	queryExecMsg string = "INSERT INTO messages (nick, receiver, msg, time) VALUES (?, ?, ?, ?)"
 )
 
 func InitDB() {
@@ -27,6 +27,7 @@ func InitDB() {
 	CREATE TABLE IF NOT EXISTS messages (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		nick Text,
+		receiver Text,
 		msg Text,
 		time Text
 	);`
@@ -40,14 +41,14 @@ func InitDB() {
 }
 
 func AddMsgObj(msg model.ChatMessage) {
-	_, err := db.Exec(queryExecMsg, msg.Nick, msg.Msg, msg.Timestamp.Format(time.RFC3339))
+	_, err := db.Exec(queryExecMsg, msg.Nick, msg.To, msg.Msg, msg.Timestamp.Format(time.RFC3339))
 	if err != nil {
 		panic(err)
 	}
 }
 
 func GetMsgObj() []model.ChatMessage {
-	rows, err := db.Query("SELECT nick, msg, time FROM messages")
+	rows, err := db.Query("SELECT nick, receiver, msg, time FROM messages")
 	if err != nil {
 		panic(err)
 	}
@@ -56,12 +57,13 @@ func GetMsgObj() []model.ChatMessage {
 	var history []model.ChatMessage
 
 	for rows.Next() {
-		var nick, msg, timeStr string
-		rows.Scan(&nick, &msg, &timeStr)
+		var nick, receiver, msg, timeStr string
+		rows.Scan(&nick, &receiver, &msg, &timeStr)
 
 		t, _ := time.Parse(time.RFC3339, timeStr)
 		history = append(history, model.ChatMessage{
 			Nick:      nick,
+			To:        receiver,
 			Msg:       msg,
 			Timestamp: t,
 		})

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"serverpshh/model"
 	"strings"
+	"sync"
 	"time"
 
 	"serverpshh/dbase"
@@ -15,8 +16,10 @@ import (
 )
 
 var (
-	clients   = make(map[*websocket.Conn]string)
-	broadcast = make(chan model.Message)
+	clients = make(map[*websocket.Conn]string)
+	mu      sync.Mutex
+
+	broadcast = make(chan model.ChatMessage)
 )
 
 var upgrader = websocket.Upgrader{
@@ -58,23 +61,29 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 	_, b, _ := conn.ReadMessage()
 	nick := strings.TrimSpace(string(b))
 
+	mu.Lock()
 	clients[conn] = nick
+	mu.Unlock()
+
 	fmt.Println(nick + " : Client Connected")
 
 	//Цикл для чтения
 	for {
-		_, message, err := conn.ReadMessage()
+		var msg model.ChatMessage
+		err := conn.ReadJSON(&msg)
 		if err != nil {
 			log.Println("Client Disconnected", err)
+
+			mu.Lock()
 			delete(clients, conn)
-			err := conn.Close()
-			if err != nil {
-				return
-			}
+			mu.Unlock()
+
+			conn.Close()
 			break
 		}
-		text := string(message)
-		broadcast <- model.Message{Text: text, SenderName: nick}
+		msg.Nick = nick
+		msg.Timestamp = time.Now()
+		broadcast <- msg
 	}
 }
 
@@ -82,27 +91,24 @@ func handleMessages() {
 	for {
 		msg := <-broadcast
 
-		fmt.Println("Message Received:", msg)
-
-		msgObj := model.ChatMessage{
-			Nick:      msg.SenderName,
-			Msg:       msg.Text,
-			Timestamp: time.Now(),
+		dbase.AddMsgObj(msg)
+		b, err := json.Marshal(msg)
+		if err != nil {
+			log.Println(err)
+			continue
 		}
 
-		dbase.AddMsgObj(msgObj)
-		b, _ := json.Marshal(msgObj)
-
-		for client := range clients {
-			err := client.WriteMessage(websocket.TextMessage, b)
-			if err != nil {
-				log.Printf("Error PUSH msg: %v\n", err)
-				err := client.Close()
+		mu.Lock()
+		for client, clientNick := range clients {
+			if msg.To == "" || clientNick == msg.To || clientNick == msg.Nick {
+				err := client.WriteMessage(websocket.TextMessage, b)
 				if err != nil {
-					return
+					log.Println(err)
+					client.Close()
+					delete(clients, client)
 				}
-				delete(clients, client)
 			}
 		}
+		mu.Unlock()
 	}
 }
